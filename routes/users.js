@@ -26,6 +26,7 @@ router.post("/upsertMe", async (req, res) => {
       data: result.rows[0],
     });
   } catch (e) {
+    console.error(e);
     return res.status(500).json({
       success: false,
       message: e.message,
