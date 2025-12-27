@@ -1,2 +1,8 @@
-node_modules
+# Node modules
+node_modules/
+
+# 환경 파일
 .env
+
+# Firebase 비공개 키
+serviceAccountKey.json
