@@ -4,8 +4,8 @@ const { firebaseAuthMiddleware } = require("../middlewares/firebase_auth_middlew
 
 const router = express.Router();
 
+/// 내 유저 정보 저장/갱신하기
 router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
-  const userPk = req.userPk;
   const provider = req.provider;
   const providerUserId = req.uid;
   const { nickname, profileImageUrl } = req.body;
@@ -13,15 +13,15 @@ router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       `
-      insert into users (id, provider, provider_user_id, nickname, profile_image_url)
-      values ($1, $2, $3, $4, $5)
+      insert into users (provider, provider_user_id, nickname, profile_image_url)
+      values ($1, $2, $3, $4)
       on conflict (provider, provider_user_id)
       do update set
         nickname = excluded.nickname,
         profile_image_url = excluded.profile_image_url
       returning id, provider, provider_user_id as "providerUserId", nickname, profile_image_url as "profileImageUrl", created_at as "createdAt";
       `,
-      [userPk, provider, providerUserId, nickname ?? null, profileImageUrl ?? null]
+      [provider, providerUserId, nickname ?? null, profileImageUrl ?? null]
     );
 
     return res.json({
