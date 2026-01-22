@@ -8,6 +8,7 @@ const serviceAccount = require("./serviceAccountKey.json");
 const devicesRoutes = require("./routes/devices");
 const usersRoutes = require("./routes/users");
 const fcmTokensRoutes = require("./routes/fcm_tokens");
+const { createMqttClient } = require("./mqtt/mqtt_client");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -19,6 +20,8 @@ app.use(express.json());
 app.use("/api/devices", devicesRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/fcmTokens", fcmTokensRoutes);
+
+createMqttClient();
 
 const port = process.env.PORT;
 
