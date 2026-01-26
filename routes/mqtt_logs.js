@@ -4,24 +4,27 @@ const { firebaseAuthMiddleware } = require("../middlewares/firebase_auth_middlew
 
 const router = express.Router();
 
-router.get("/list", firebaseAuthMiddleware, async (req, res) => {
-  const { deviceId } = req.query;
+router.get("/all", firebaseAuthMiddleware, async (req, res) => {
   const client = await db.connect();
 
   try {
     const result = await client.query(
       `
       select
-        id,
-        received_at as "receivedAt",
-        device_id as "deviceId",
-        topic,
-        payload
-      from mqtt_logs
-      where device_id = $1
-      order by id desc;
+        ml.id,
+        ml.received_at as "receivedAt",
+        ml.device_id as "deviceId",
+        ml.topic,
+        ml.payload
+      from mqtt_logs ml
+      join devices d
+        on d.device_id = ml.device_id
+      join user_devices ud
+        on ud.device_pk = d.id
+      where ud.user_pk = $1
+      order by ml.received_at desc;
       `,
-      [deviceId]
+      [req.userPk]
     );
 
     return res.json({
