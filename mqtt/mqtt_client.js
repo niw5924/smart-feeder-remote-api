@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const mqtt = require("mqtt");
 const pool = require("../db");
+const admin = require("firebase-admin");
 
 // mqtt 메시지 로그를 DB에 저장
 async function insertMqttLog({ deviceId, topic, payload }) {
@@ -12,6 +13,57 @@ async function insertMqttLog({ deviceId, topic, payload }) {
     );
   } catch (err) {
     console.error("[MQTT] log insert error:", err?.message ?? err);
+  }
+}
+
+// deviceId로 알림 대상 FCM 토큰 조회
+async function getFcmTokensByDeviceId(deviceId) {
+  try {
+    const { rows } = await pool.query(
+      `
+      select distinct ft.token
+      from devices d
+      join user_devices ud on ud.device_pk = d.id
+      join fcm_tokens ft on ft.user_pk = ud.user_pk
+      where d.device_id = $1
+        and ft.is_enabled = true
+      `,
+      [deviceId]
+    );
+
+    return rows.map((r) => r.token).filter(Boolean);
+  } catch (err) {
+    console.error("[FCM] token query error:", err?.message ?? err);
+    return [];
+  }
+}
+
+// presence 상태를 FCM으로 전송
+async function sendPresenceFcm({ deviceId, status }) {
+  try {
+    const tokens = await getFcmTokensByDeviceId(deviceId);
+    if (tokens.length === 0) return;
+
+    const statusText = status === "online" ? "온라인" : "오프라인";
+
+    console.log(
+      `[FCM] send presence: device=${deviceId}, status=${status}, tokens=${tokens.length}`
+    );
+
+    await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: "급식기 상태",
+        body: `기기(${deviceId})가 ${statusText} 상태입니다.`,
+      },
+      data: {
+        notificationType: "FEEDER_PRESENCE",
+        deviceId: String(deviceId),
+        status,
+      },
+    });
+  } catch (err) {
+    console.error("[FCM] send error:", err?.message ?? err);
   }
 }
 
@@ -37,7 +89,8 @@ function createMqttClient() {
 
   client.on("message", (topic, payload) => {
     const message = payload ? payload.toString("utf8") : null;
-    const deviceId = String(topic).split("/")[1];
+    const parts = String(topic).split("/");
+    const deviceId = parts[1];
 
     if (message && message.length > 0) {
       console.log(`mqtt received:${topic}/${message}`);
@@ -50,6 +103,13 @@ function createMqttClient() {
       topic,
       payload: message && message.length > 0 ? message : null,
     });
+
+    if (parts.length >= 3 && parts[2] === "presence") {
+      const status = message;
+      if (status === "online" || status === "offline") {
+        sendPresenceFcm({ deviceId, status });
+      }
+    }
   });
 
   client.on("error", (err) => {
