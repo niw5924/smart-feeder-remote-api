@@ -87,6 +87,18 @@ function createMqttClient() {
     });
   });
 
+  /// payload 없음
+  /// 예시) mqtt received:feeder/SF-CF3B015C/feed_button
+  /// 예시) mqtt received:feeder/SF-CF3B015C/factory_reset
+  ///
+  /// payload 있음
+  /// 예시) mqtt received:feeder/SF-CF3B015C/presence/online
+  /// 예시) mqtt received:feeder/SF-CF3B015C/presence/offline
+  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/feeding
+  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/idle
+  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/unknown
+  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/event/feeding_started_remote
+  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/event/feeding_finished_remote
   client.on("message", (topic, payload) => {
     const message = payload ? payload.toString("utf8") : null;
     const parts = String(topic).split("/");
