@@ -4,13 +4,19 @@ const mqtt = require("mqtt");
 const pool = require("../db");
 const admin = require("firebase-admin");
 
-// mqtt 메시지 로그를 DB에 저장
+// mqtt 메시지 로그를 DB에 저장하고, 생성된 로그 1건을 반환(FCM data로 전달용)
 async function insertMqttLog({ deviceId, topic, payload }) {
   try {
-    await pool.query(
-      "insert into mqtt_logs (device_id, topic, payload) values ($1, $2, $3)",
+    const { rows } = await pool.query(
+      `
+      insert into mqtt_logs (device_id, topic, payload)
+      values ($1, $2, $3)
+      returning id, received_at, device_id, topic, payload
+      `,
       [deviceId, topic, payload]
     );
+
+    return rows[0];
   } catch (err) {
     console.error("[MQTT] log insert error:", err?.message ?? err);
   }
@@ -38,8 +44,21 @@ async function getFcmTokensByDeviceId(deviceId) {
   }
 }
 
+// mqtt_logs row를 FCM data로 전달 가능한 형태로 변환(FCM data는 문자열만 허용)
+function buildMqttLogData(mqttLog) {
+  if (!mqttLog) return {};
+
+  return {
+    id: String(mqttLog.id),
+    receivedAt: new Date(mqttLog.received_at).toISOString(),
+    deviceId: String(mqttLog.device_id),
+    topic: String(mqttLog.topic),
+    payload: mqttLog.payload == null ? "" : String(mqttLog.payload),
+  };
+}
+
 // presence 상태를 FCM으로 전송
-async function sendPresenceFcm({ deviceId, status }) {
+async function sendPresenceFcm({ deviceId, status, mqttLog }) {
   try {
     const tokens = await getFcmTokensByDeviceId(deviceId);
     if (tokens.length === 0) return;
@@ -58,8 +77,7 @@ async function sendPresenceFcm({ deviceId, status }) {
       },
       data: {
         notificationType: "FEEDER_PRESENCE",
-        deviceId: String(deviceId),
-        status,
+        ...buildMqttLogData(mqttLog),
       },
     });
   } catch (err) {
@@ -68,7 +86,7 @@ async function sendPresenceFcm({ deviceId, status }) {
 }
 
 // 기기 초기화를 FCM으로 전송
-async function sendFactoryResetFcm({ deviceId }) {
+async function sendFactoryResetFcm({ deviceId, mqttLog }) {
   try {
     const tokens = await getFcmTokensByDeviceId(deviceId);
     if (tokens.length === 0) return;
@@ -83,7 +101,7 @@ async function sendFactoryResetFcm({ deviceId }) {
       },
       data: {
         notificationType: "FEEDER_RESET",
-        deviceId: String(deviceId),
+        ...buildMqttLogData(mqttLog),
       },
     });
   } catch (err) {
@@ -124,7 +142,7 @@ function createMqttClient() {
 
     if (!deviceId) return;
 
-    await insertMqttLog({
+    const mqttLog = await insertMqttLog({
       deviceId,
       topic,
       payload: message && message.length > 0 ? message : null,
@@ -135,13 +153,13 @@ function createMqttClient() {
     // - presence: 온라인/오프라인 상태 알림 FCM 전송
     switch (parts[2]) {
       case "factory_reset": {
-        await sendFactoryResetFcm({ deviceId });
+        await sendFactoryResetFcm({ deviceId, mqttLog });
         break;
       }
       case "presence": {
         const status = message;
         if (status === "online" || status === "offline") {
-          await sendPresenceFcm({ deviceId, status });
+          await sendPresenceFcm({ deviceId, status, mqttLog });
         }
         break;
       }
