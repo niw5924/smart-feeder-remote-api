@@ -109,6 +109,25 @@ async function sendFactoryResetFcm({ deviceId, mqttLog }) {
   }
 }
 
+/// Flutter 로그 갱신용
+/// notification 없이(data-only) FCM 전송
+async function sendMqttLogDataOnlyFcm({ deviceId, mqttLog }) {
+  try {
+    const tokens = await getFcmTokensByDeviceId(deviceId);
+    if (tokens.length === 0) return;
+
+    await admin.messaging().sendEachForMulticast({
+      tokens,
+      data: {
+        notificationType: "MQTT_LOG",
+        ...buildMqttLogData(mqttLog),
+      },
+    });
+  } catch (err) {
+    console.error("[FCM] send data-only error:", err?.message ?? err);
+  }
+}
+
 function createMqttClient() {
   const mqttUrl = `mqtts://${process.env.MQTT_HOST}:${process.env.MQTT_PORT}`;
 
@@ -163,8 +182,11 @@ function createMqttClient() {
         }
         break;
       }
-      default:
+      // presence / factory_reset 외 모든 로그는 data-only 전송
+      default: {
+        await sendMqttLogDataOnlyFcm({ deviceId, mqttLog });
         break;
+      }
     }
   });
 
