@@ -46,8 +46,6 @@ async function getFcmTokensByDeviceId(deviceId) {
 
 // mqtt_logs row를 FCM data로 전달 가능한 형태로 변환(FCM data는 문자열만 허용)
 function buildMqttLogData(mqttLog) {
-  if (!mqttLog) return {};
-
   return {
     id: String(mqttLog.id),
     receivedAt: new Date(mqttLog.received_at).toISOString(),
@@ -166,6 +164,8 @@ function createMqttClient() {
       topic,
       payload: message && message.length > 0 ? message : null,
     });
+
+    if (!mqttLog) return;
 
     // 하나의 MQTT 메시지에 하나의 FCM만 처리
     // - factory_reset: 기기 초기화 알림 FCM 전송
